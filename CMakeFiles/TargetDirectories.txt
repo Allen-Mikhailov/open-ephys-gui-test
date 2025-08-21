@@ -1,0 +1,7 @@
+/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/CMakeFiles/open-ephys-gui-test.dir
+/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/CMakeFiles/edit_cache.dir
+/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/CMakeFiles/rebuild_cache.dir
+/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/CMakeFiles/list_install_components.dir
+/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/CMakeFiles/install.dir
+/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/CMakeFiles/install/local.dir
+/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/CMakeFiles/install/strip.dir

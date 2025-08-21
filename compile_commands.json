@@ -1,0 +1,20 @@
+[
+{
+  "directory": "/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test",
+  "command": "/usr/bin/c++ -DDEBUG=1 -DJUCE_DISABLE_NATIVE_FILECHOOSERS=1 -DOEPLUGIN -D_DEBUG=1 -Dopen_ephys_gui_test_EXPORTS -I/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/../../plugin-GUI/JuceLibraryCode -I/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/../../plugin-GUI/JuceLibraryCode/modules -I/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/../../plugin-GUI/Plugins/Headers -I/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/../../plugin-GUI/installed_libs/include -g -fPIC -fPIC -rdynamic -O3 -o CMakeFiles/open-ephys-gui-test.dir/Source/DataThreadPlugin.cpp.o -c /home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/Source/DataThreadPlugin.cpp",
+  "file": "/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/Source/DataThreadPlugin.cpp",
+  "output": "CMakeFiles/open-ephys-gui-test.dir/Source/DataThreadPlugin.cpp.o"
+},
+{
+  "directory": "/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test",
+  "command": "/usr/bin/c++ -DDEBUG=1 -DJUCE_DISABLE_NATIVE_FILECHOOSERS=1 -DOEPLUGIN -D_DEBUG=1 -Dopen_ephys_gui_test_EXPORTS -I/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/../../plugin-GUI/JuceLibraryCode -I/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/../../plugin-GUI/JuceLibraryCode/modules -I/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/../../plugin-GUI/Plugins/Headers -I/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/../../plugin-GUI/installed_libs/include -g -fPIC -fPIC -rdynamic -O3 -o CMakeFiles/open-ephys-gui-test.dir/Source/DataThreadPluginEditor.cpp.o -c /home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/Source/DataThreadPluginEditor.cpp",
+  "file": "/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/Source/DataThreadPluginEditor.cpp",
+  "output": "CMakeFiles/open-ephys-gui-test.dir/Source/DataThreadPluginEditor.cpp.o"
+},
+{
+  "directory": "/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test",
+  "command": "/usr/bin/c++ -DDEBUG=1 -DJUCE_DISABLE_NATIVE_FILECHOOSERS=1 -DOEPLUGIN -D_DEBUG=1 -Dopen_ephys_gui_test_EXPORTS -I/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/../../plugin-GUI/JuceLibraryCode -I/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/../../plugin-GUI/JuceLibraryCode/modules -I/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/../../plugin-GUI/Plugins/Headers -I/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/../../plugin-GUI/installed_libs/include -g -fPIC -fPIC -rdynamic -O3 -o CMakeFiles/open-ephys-gui-test.dir/Source/OpenEphysLib.cpp.o -c /home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/Source/OpenEphysLib.cpp",
+  "file": "/home/callisto/Code/Education/Kemere/OEPlugins/open-ephys-gui-test/Source/OpenEphysLib.cpp",
+  "output": "CMakeFiles/open-ephys-gui-test.dir/Source/OpenEphysLib.cpp.o"
+}
+]

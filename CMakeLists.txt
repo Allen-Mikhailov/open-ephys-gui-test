@@ -105,3 +105,5 @@ endforeach()
 #
 #target_link_libraries(${PLUGIN_NAME} ${LIBNAME_LIBRARIES})
 #target_include_directories(${PLUGIN_NAME} PRIVATE ${LIBNAME_INCLUDE_DIRS})
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

@@ -55,8 +55,11 @@ extern "C" EXPORT int getPluginInfo (int index, Plugin::PluginInfo* info)
             //one case per plugin. This example is for a processor which connects directly to the signal chain
         case 0:
 
+			// name of the library (since one OpenEphysLib file can be used for multiple plugins)
+			// edit to change how your plugin's name is displayed in the GUI
+			info->dataThread.name = "Allens Plugin";
+
             info->type = Plugin::DATA_THREAD;
-            info->dataThread.name = "Custom Source"; // <---- update
             info->dataThread.creator = &createDataThread<DataThreadPlugin>; // <---- update
             break;
 

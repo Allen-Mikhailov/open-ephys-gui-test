@@ -22,8 +22,19 @@
  */
 
 #include "DataThreadPlugin.h"
-
 #include "DataThreadPluginEditor.h"
+
+const int NUM_CHANNELS = 16;
+const int MAX_SAMPLES_PER_CHANNEL = 1024;
+const int MAX_SAMPLES_PER_BUFFER = MAX_SAMPLES_PER_CHANNEL;
+int raw_samples[NUM_CHANNELS * MAX_SAMPLES_PER_CHANNEL];
+float scaled_samples[NUM_CHANNELS * MAX_SAMPLES_PER_BUFFER];
+int64 sample_numbers[MAX_SAMPLES_PER_CHANNEL];
+uint64 event_codes[MAX_SAMPLES_PER_CHANNEL];
+double timestamps[MAX_SAMPLES_PER_CHANNEL];
+int64 totalSamples = 0;
+DataBuffer* dataBuffer;
+
 
 struct PluginSettingsObject
 {
@@ -50,21 +61,96 @@ void DataThreadPlugin::updateSettings (OwnedArray<ContinuousChannel>* continuous
                                        OwnedArray<DeviceInfo>* devices,
                                        OwnedArray<ConfigurationObject>* configurationObjects)
 {
+	// Clear previous values
+   sourceStreams->clear();
+   sourceBuffers.clear(); // DataThread class member
+   continuousChannels->clear();
+   eventChannels->clear();
+
+   DataStream::Settings settings
+   {
+      "device_stream", // stream name
+      "description",   // stream description
+      "identifier",    // stream identifier
+      30000.0          // stream sample rate
+   };
+
+   DataStream* stream = new DataStream(settings);
+
+   sourceStreams->add(stream); // add pointer to owned array
+
+   // create a data buffer and add it to the sourceBuffer array
+   sourceBuffers.add(new DataBuffer(NUM_CHANNELS, 48000));
+   dataBuffer = sourceBuffers.getLast();
+
+   for (int i = 0; i < NUM_CHANNELS; i++)
+   {
+      ContinuousChannel::Settings settings{
+                             ContinuousChannel::Type::ELECTRODE, // channel type
+                             "CH" + String(i+1), // channel name
+                             "description",      // channel description
+                             "identifier",       // channel identifier
+                             0.195,              // channel bitvolts scaling
+                             stream              // associated data stream
+                     };
+
+      continuousChannels->add(new ContinuousChannel(settings));
+   }
+
+   EventChannel::Settings settings2{
+                     EventChannel::Type::TTL, // channel type (must be TTL)
+                     "Device Event Channel",  // channel name
+                     "description",           // channel description
+                     "identifier",            // channel identifier
+                     stream,                  // associated data stream
+                     8                        // maximum number of TTL lines
+             };
+
+   eventChannels->add(new EventChannel(settings2));
 }
 
 bool DataThreadPlugin::startAcquisition()
 {
-    return true;
+	startThread();
+	return true;
 }
+
+
 
 bool DataThreadPlugin::updateBuffer()
 {
-    return true;
+
+
+   for (int i = 0; i < MAX_SAMPLES_PER_CHANNEL; i++)
+   {
+      for (int j = 0; j < NUM_CHANNELS; j++)
+      {
+         scaled_samples[i + j * MAX_SAMPLES_PER_CHANNEL] = (float) (j + i * NUM_CHANNELS);
+      }
+      sample_numbers[i] = totalSamples++;
+   }
+
+   dataBuffer->addToBuffer(scaled_samples,
+                           sample_numbers,
+                           timestamps,
+                           event_codes,
+                           MAX_SAMPLES_PER_CHANNEL);
+
+   return true;
+
 }
 
 bool DataThreadPlugin::stopAcquisition()
 {
-    return true;
+	if (isThreadRunning())
+	{
+	  signalThreadShouldExit(); //stop thread
+	}
+
+	waitForThreadToExit(500);
+	dataBuffer->clear();
+
+	return true;
 }
 
 void DataThreadPlugin::resizeBuffers()
