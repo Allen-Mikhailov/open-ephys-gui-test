@@ -1,5 +1,6 @@
 // Client side implementation of UDP client-server model 
 #include <bits/stdc++.h> 
+#include <cmath>
 #include <stdlib.h> 
 #include <unistd.h> 
 #include <string.h> 
@@ -7,6 +8,7 @@
 #include <sys/socket.h> 
 #include <arpa/inet.h> 
 #include <netinet/in.h> 
+#include <chrono>  // Required for std::chrono::milliseconds
   
 #define PORT     8080 
 #define MAXLINE 1024 
@@ -33,17 +35,24 @@ int main() {
       
     int n;
     socklen_t len; 
+
+	int frame = 0;
+	float f;
+	while (1)
+	{
+		f = sinf((float) frame * 0.01);
+		sendto(sockfd, &f, sizeof(float), 
+			MSG_CONFIRM, (const struct sockaddr *) &servaddr,  
+				sizeof(servaddr)); 
+
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+		frame++;
+	}
       
-    sendto(sockfd, (const char *)hello, strlen(hello), 
-        MSG_CONFIRM, (const struct sockaddr *) &servaddr,  
-            sizeof(servaddr)); 
-    std::cout<<"Hello message sent."<<std::endl; 
+    
           
-    n = recvfrom(sockfd, (char *)buffer, MAXLINE,  
-                MSG_WAITALL, (struct sockaddr *) &servaddr, 
-                &len); 
-    buffer[n] = '\0'; 
-    std::cout<<"Server :"<<buffer<<std::endl; 
+    
   
     close(sockfd); 
     return 0; 

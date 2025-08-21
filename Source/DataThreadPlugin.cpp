@@ -40,8 +40,9 @@
 #include <array>
 #include <iostream>
 #include <string_view>
+#include <vector>
 
-const int NUM_CHANNELS = 16;
+const int NUM_CHANNELS = 1;
 const int MAX_SAMPLES_PER_CHANNEL = 1024;
 const int MAX_SAMPLES_PER_BUFFER = MAX_SAMPLES_PER_CHANNEL;
 int raw_samples[NUM_CHANNELS * MAX_SAMPLES_PER_CHANNEL];
@@ -66,6 +67,8 @@ int sfd;
 int ep;
 
 int server_running = false;
+
+std::queue<float> udp_values;
 
 static int set_nonblocking(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
@@ -165,6 +168,8 @@ int tick_udp()
 	}
 
 	for (int i = 0; i < n; ++i) {
+
+		LOGD("Looping : ", i);
 		int fd = events[i].data.fd;
 
 		if (fd == sfd) {
@@ -179,22 +184,27 @@ int tick_udp()
 		if (fd == sock) {
 			// Drain all readable datagrams (edge-triggered!)
 			while (true) {
+				
+				LOGD("Looping2");
+
 				sockaddr_in src{};
 				socklen_t srclen = sizeof(src);
 				ssize_t r = recvfrom(sock, buf.data(), buf.size(), 0,
 									 reinterpret_cast<sockaddr*>(&src), &srclen);
 				if (r > 0) {
-					LOGD("Got %d btyes ", r);
+					LOGD("Got ", r, " bytes");
 					// Example "processing": print and echo back
 					char ip[INET_ADDRSTRLEN];
 					inet_ntop(AF_INET, &src.sin_addr, ip, sizeof(ip));
 					uint16_t sport = ntohs(src.sin_port);
 
-					std::string_view msg(buf.data(), static_cast<size_t>(r));
+					udp_values.push(*((float*) buf.data()));
+
+					// std::string_view msg(buf.data(), static_cast<size_t>(r));
 					// std::cout << "Got " << r << " bytes from " << ip << ":" << sport
 					//		  << " -> \"" << msg << "\"\n";
 
-					LOGD("Got msg %s", msg);
+					// LOGD("Got msg", msg);
 
 					// Optional: echo response
 					// sendto(sock, msg.data(), msg.size(), 0,
@@ -212,6 +222,8 @@ int tick_udp()
 			}
 		}
 	}
+
+	return 0;
 
 }
 
@@ -302,24 +314,30 @@ bool DataThreadPlugin::updateBuffer()
 {
 
 
-   for (int i = 0; i < MAX_SAMPLES_PER_CHANNEL; i++)
-   {
-      for (int j = 0; j < NUM_CHANNELS; j++)
-      {
-         scaled_samples[i + j * MAX_SAMPLES_PER_CHANNEL] = (float) (j + i * NUM_CHANNELS);
-      }
-      sample_numbers[i] = totalSamples++;
-   }
+  
 
 	tick_udp();
 
-   dataBuffer->addToBuffer(scaled_samples,
+	int datapoints = udp_values.size();
+
+	for (int i = 0; i < datapoints; i++)
+	{
+		for (int j = 0; j < NUM_CHANNELS; j++)
+		{
+			scaled_samples[i] = udp_values.front() * 25;
+			udp_values.pop();
+		}
+		sample_numbers[i] = totalSamples++;
+	}
+
+
+	dataBuffer->addToBuffer(scaled_samples,
                            sample_numbers,
                            timestamps,
                            event_codes,
-                           MAX_SAMPLES_PER_CHANNEL);
+                           datapoints);
 
-   return true;
+	return true;
 
 }
 
