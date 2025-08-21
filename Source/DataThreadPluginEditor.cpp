@@ -28,4 +28,12 @@ DataThreadPluginEditor::DataThreadPluginEditor (GenericProcessor* parentNode, Da
 {
     desiredWidth = 150; // sets the width of the plugin editor
     this->thread = thread;
+
+	// event frequency editor
+   addBoundedValueParameterEditor (Parameter::PROCESSOR_SCOPE, // parameter scope
+                                 "port", // parameter name
+                                 15, // x pos
+                                 35); // y pos
 }
+
+
