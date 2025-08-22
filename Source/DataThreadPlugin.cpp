@@ -39,6 +39,8 @@
 
 #include <array>
 #include <iostream>
+#include <thread>
+#include <stop_token>
 #include <string_view>
 #include <vector>
 
@@ -54,21 +56,15 @@ int64 totalSamples = 0;
 DataBuffer* dataBuffer;
 
 // UDP variables
-int port = 8080;
+int port = -1;
 
-std::array<char, 65536> buf{}; // max UDP payload size (practical)
+const int MAX_UDP_VALUES_STORED = 100;
 
-constexpr int MAX_EVENTS = 64;
-std::array<epoll_event, MAX_EVENTS> events;
+std::atomic<int> packet_queue_count(0);
+std::atomic<float> udp_values[MAX_UDP_VALUES_STORED];
+std::atomic<int> server_running(0);
+std::atomic<int> server_closed(0);
 
-// UDP stuff idk
-int sock; // UDP socket
-int sfd;
-int ep;
-
-int server_running = false;
-
-std::queue<float> udp_values;
 
 static int set_nonblocking(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
@@ -76,18 +72,23 @@ static int set_nonblocking(int fd) {
     return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-int init_udp_server() {
+int udp_thread_function() {
+    LOGD("Attempting to listen on port ", port);
     // Create UDP socket (IPv4)
+	
+	std::array<char, 65536> buf{}; // max UDP payload size (practical)
+
+	constexpr int MAX_EVENTS = 64;
+	std::array<epoll_event, MAX_EVENTS> events;
+
+	// UDP stuff idk
+	int sock; // UDP socket
+	int sfd;
+	int ep;
+	
     sock = ::socket(AF_INET, SOCK_DGRAM, 0);
     if (sock == -1) {
         LOGD("socket");
-        return 1;
-    }
-
-    // Allow quick rebinding (useful during dev)
-    int yes = 1;
-    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1) {
-         LOGD("setsockopt(SO_REUSEADDR)");
         return 1;
     }
 
@@ -95,6 +96,10 @@ int init_udp_server() {
         LOGD("fcntl(O_NONBLOCK)");
         return 1;
     }
+
+	int yes = 1;
+	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+	setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes)); // optional, Linux-specific
 
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
@@ -144,89 +149,131 @@ int init_udp_server() {
         return 1;
     }
 
-    LOGD("UDP server listening on port ");
+
+    LOGD("UDP server listening on port ", port);
 	server_running = true;
 
-	return 0;
-    
-}
+	
 
-int close_udp_server() {
-	close(ep);
-    close(sfd);
-    close(sock);
-    return 0;
-}
-
-int tick_udp()
-{
-	int n = epoll_wait(ep, events.data(), MAX_EVENTS, -1);
-	if (n == -1) {
-		if (errno == EINTR) return 1;
-		LOGD("epoll_wait");
-		return 1;
-	}
-
-	for (int i = 0; i < n; ++i) {
-
-		LOGD("Looping : ", i);
-		int fd = events[i].data.fd;
-
-		if (fd == sfd) {
-			// Handle shutdown signal
-			signalfd_siginfo si;
-			ssize_t r = read(sfd, &si, sizeof(si));
-			(void)r;
-			server_running = false;
-			break;
+	while (server_running) {
+		int n = epoll_wait(ep, events.data(), MAX_EVENTS, -1);
+		if (n == -1) {
+			if (errno == EINTR) continue;
+			LOGD("epoll_wait");
+			continue;
 		}
 
-		if (fd == sock) {
-			// Drain all readable datagrams (edge-triggered!)
-			while (true) {
-				
-				LOGD("Looping2");
+		for (int i = 0; i < n; ++i) {
 
-				sockaddr_in src{};
-				socklen_t srclen = sizeof(src);
-				ssize_t r = recvfrom(sock, buf.data(), buf.size(), 0,
-									 reinterpret_cast<sockaddr*>(&src), &srclen);
-				if (r > 0) {
-					LOGD("Got ", r, " bytes");
-					// Example "processing": print and echo back
-					char ip[INET_ADDRSTRLEN];
-					inet_ntop(AF_INET, &src.sin_addr, ip, sizeof(ip));
-					uint16_t sport = ntohs(src.sin_port);
+			int fd = events[i].data.fd;
 
-					udp_values.push(*((float*) buf.data()));
+			if (fd == sfd) {
+				// Handle shutdown signal
+				signalfd_siginfo si;
+				ssize_t r = read(sfd, &si, sizeof(si));
+				(void)r;
+				server_running = false;
+				break;
+			}
 
-					// std::string_view msg(buf.data(), static_cast<size_t>(r));
-					// std::cout << "Got " << r << " bytes from " << ip << ":" << sport
-					//		  << " -> \"" << msg << "\"\n";
+			if (fd == sock) {
+				// Drain all readable datagrams (edge-triggered!)
+				while (server_running) {
+					
 
-					// LOGD("Got msg", msg);
+					sockaddr_in src{};
+					socklen_t srclen = sizeof(src);
 
-					// Optional: echo response
-					// sendto(sock, msg.data(), msg.size(), 0,
-					//        reinterpret_cast<sockaddr*>(&src), srclen);
-				} else if (r == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-					// No more packets
-					break;
-				} else if (r == 0) {
-					// UDP doesn't really give 0 here, but handle defensively
-					break;
-				} else {
-					LOGD("recvfrom");
-					break;
+					ssize_t r = recvfrom(sock, buf.data(), buf.size(), 0,
+										 reinterpret_cast<sockaddr*>(&src), &srclen);
+					if (r > 0) {
+						// Example "processing": print and echo back
+						char ip[INET_ADDRSTRLEN];
+						inet_ntop(AF_INET, &src.sin_addr, ip, sizeof(ip));
+						uint16_t sport = ntohs(src.sin_port);
+
+						udp_values[packet_queue_count] = *((float*) buf.data());
+						packet_queue_count++;
+						LOGD("Data", *((float*) buf.data()));
+
+						// std::string_view msg(buf.data(), static_cast<size_t>(r));
+						// std::cout << "Got " << r << " bytes from " << ip << ":" << sport
+						//		  << " -> \"" << msg << "\"\n";
+
+						// LOGD("Got msg", msg);
+
+						// Optional: echo response
+						// sendto(sock, msg.data(), msg.size(), 0,
+						//        reinterpret_cast<sockaddr*>(&src), srclen);
+					} else if (r == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+						// No more packets
+						break;
+					} else if (r == 0) {
+						// UDP doesn't really give 0 here, but handle defensively
+						break;
+					} else {
+						LOGD("recvfrom");
+						break;
+					}
 				}
 			}
 		}
 	}
 
-	return 0;
 
+	// Closing the socket
+	if (sock != -1) {
+        epoll_ctl(ep, EPOLL_CTL_DEL, sock, nullptr); // remove from epoll
+        close(sock);
+        sock = -1;
+        std::cout << "Closed UDP socket\n";
+    }
+
+    if (sfd != -1) {
+        epoll_ctl(ep, EPOLL_CTL_DEL, sfd, nullptr); // remove signal fd
+        close(sfd);
+        sfd = -1;
+        std::cout << "Closed signal fd\n";
+    }
+
+    if (ep != -1) {
+        close(ep);
+        ep = -1;
+        std::cout << "Closed epoll instance\n";
+    }
+
+	server_closed = true;
+	LOGD("Closed Plugin");
+
+	return 0;
+    
 }
 
+void close_udp_thread()
+{
+	// Check if existing server is running
+	if (server_running)
+	{
+		// Close existing thread
+		server_closed = false;
+		server_running = false; // Actually closes thread
+
+		LOGD("Attempt to close server");
+
+		// Wait till server has closed
+		while (!server_closed)
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
+}
+
+void restart_thread()
+{
+	close_udp_thread();	
+
+	server_closed = false;
+	std::thread t(udp_thread_function);
+	t.detach();
+}
 
 struct PluginSettingsObject
 {
@@ -261,8 +308,8 @@ void DataThreadPlugin::updateSettings (OwnedArray<ContinuousChannel>* continuous
 
    DataStream::Settings settings
    {
-      "device_stream", // stream name
-      "description",   // stream description
+      "UDP Packet Stream", // stream name
+      "Pulls data from UDP packets",   // stream description
       "identifier",    // stream identifier
       30000.0          // stream sample rate
    };
@@ -304,7 +351,7 @@ void DataThreadPlugin::updateSettings (OwnedArray<ContinuousChannel>* continuous
 bool DataThreadPlugin::startAcquisition()
 {
 	startThread();
-	init_udp_server(); 
+	restart_thread(); // Start UDP thread
 	return true;
 }
 
@@ -313,29 +360,23 @@ bool DataThreadPlugin::startAcquisition()
 bool DataThreadPlugin::updateBuffer()
 {
 
+	int used_values = 0;
 
-  
-
-	tick_udp();
-
-	int datapoints = udp_values.size();
-
-	for (int i = 0; i < datapoints; i++)
+	for (int i = 0; i < packet_queue_count; i++)
 	{
-		for (int j = 0; j < NUM_CHANNELS; j++)
-		{
-			scaled_samples[i] = udp_values.front() * 25;
-			udp_values.pop();
-		}
+		scaled_samples[i] = udp_values[i] * 25;
 		sample_numbers[i] = totalSamples++;
+		used_values++;
 	}
+
+	packet_queue_count = 0;
 
 
 	dataBuffer->addToBuffer(scaled_samples,
                            sample_numbers,
                            timestamps,
                            event_codes,
-                           datapoints);
+                           used_values);
 
 	return true;
 
@@ -347,6 +388,8 @@ bool DataThreadPlugin::stopAcquisition()
 	{
 	  signalThreadShouldExit(); //stop thread
 	}
+
+	close_udp_thread();
 
 	waitForThreadToExit(500);
 	dataBuffer->clear();
@@ -378,7 +421,14 @@ void DataThreadPlugin::parameterValueChanged (Parameter* param)
 {
    if (param->getName().equalsIgnoreCase ("port"))
    {
-      LOGD ("Port changed"); // log message
+		int new_port = param->getValue();	
+		if (server_running)
+			restart_thread();
+		else
+			port = new_port;
+
+		LOGD ("Port changed to ", port); // log message
+	
    }
    else if (param->getName().equalsIgnoreCase ("interval"))
    {

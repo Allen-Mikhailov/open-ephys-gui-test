@@ -10,7 +10,7 @@
 #include <netinet/in.h> 
 #include <chrono>  // Required for std::chrono::milliseconds
   
-#define PORT     8080 
+#define PORT	8080 
 #define MAXLINE 1024 
   
 // Driver code 
@@ -40,7 +40,7 @@ int main() {
 	float f;
 	while (1)
 	{
-		f = sinf((float) frame * 0.01);
+		f = sinf((float) frame * 0.001);
 		sendto(sockfd, &f, sizeof(float), 
 			MSG_CONFIRM, (const struct sockaddr *) &servaddr,  
 				sizeof(servaddr)); 
