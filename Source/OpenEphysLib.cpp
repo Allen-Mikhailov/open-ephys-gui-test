@@ -57,7 +57,7 @@ extern "C" EXPORT int getPluginInfo (int index, Plugin::PluginInfo* info)
 
 			// name of the library (since one OpenEphysLib file can be used for multiple plugins)
 			// edit to change how your plugin's name is displayed in the GUI
-			info->dataThread.name = "Allens Plugin";
+			info->dataThread.name = "UDP Packet Reader";
 
             info->type = Plugin::DATA_THREAD;
             info->dataThread.creator = &createDataThread<DataThreadPlugin>; // <---- update

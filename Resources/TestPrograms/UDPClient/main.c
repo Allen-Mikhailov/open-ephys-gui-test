@@ -37,11 +37,13 @@ int main() {
     socklen_t len; 
 
 	int frame = 0;
-	float f;
+	float f[2];
 	while (1)
 	{
-		f = sinf((float) frame * 0.001);
-		sendto(sockfd, &f, sizeof(float), 
+		f[0] = sinf((float) frame * 0.001);
+		f[1] = cosf((float) frame * 0.001);
+
+		sendto(sockfd, f, sizeof(float[2]), 
 			MSG_CONFIRM, (const struct sockaddr *) &servaddr,  
 				sizeof(servaddr)); 
 

@@ -40,30 +40,53 @@
 #include <array>
 #include <iostream>
 #include <thread>
-#include <stop_token>
-#include <string_view>
-#include <vector>
+#include <chrono>
 
-const int NUM_CHANNELS = 1;
+const int MAX_DATA_CHANNELS = 8;
+const int METRICS_CHANNELS = 1;
 const int MAX_SAMPLES_PER_CHANNEL = 1024;
-const int MAX_SAMPLES_PER_BUFFER = MAX_SAMPLES_PER_CHANNEL;
-int raw_samples[NUM_CHANNELS * MAX_SAMPLES_PER_CHANNEL];
-float scaled_samples[NUM_CHANNELS * MAX_SAMPLES_PER_BUFFER];
-int64 sample_numbers[MAX_SAMPLES_PER_CHANNEL];
+
+// Datapoints
+float data_points[MAX_DATA_CHANNELS * MAX_SAMPLES_PER_CHANNEL];
+int64 sample_numbers[MAX_SAMPLES_PER_CHANNEL]; 
 uint64 event_codes[MAX_SAMPLES_PER_CHANNEL];
 double timestamps[MAX_SAMPLES_PER_CHANNEL];
-int64 totalSamples = 0;
+
+int64 totalDataPointSamples = 0;
+
+
 DataBuffer* dataBuffer;
 
+// Metrics
+float metric_data_points[METRICS_CHANNELS * MAX_SAMPLES_PER_CHANNEL];
+int64 metric_sample_numbers[MAX_SAMPLES_PER_CHANNEL]; 
+uint64 metric_event_codes[MAX_SAMPLES_PER_CHANNEL];
+double metric_timestamps[MAX_SAMPLES_PER_CHANNEL];
+
+
+int64 totalDataMetricsSamples = 0;
+
+DataBuffer* metricsDataBuffer;
+
 // UDP variables
-int port = -1;
+int port = 8080;
+
+int data_channels = 2;
+float data_scale = 25;
 
 const int MAX_UDP_VALUES_STORED = 100;
 
 std::atomic<int> packet_queue_count(0);
-std::atomic<float> udp_values[MAX_UDP_VALUES_STORED];
+std::atomic<float> udp_values[MAX_UDP_VALUES_STORED * MAX_DATA_CHANNELS];
 std::atomic<int> server_running(0);
 std::atomic<int> server_closed(0);
+std::atomic<int> point_per_packet(1);
+
+typedef std::chrono::high_resolution_clock::time_point tp;
+tp get_time()
+{
+	return std::chrono::high_resolution_clock::now();
+}
 
 
 static int set_nonblocking(int fd) {
@@ -75,6 +98,9 @@ static int set_nonblocking(int fd) {
 int udp_thread_function() {
     LOGD("Attempting to listen on port ", port);
     // Create UDP socket (IPv4)
+	
+	if (port == -1)
+		return 1;
 	
 	std::array<char, 65536> buf{}; // max UDP payload size (practical)
 
@@ -192,19 +218,16 @@ int udp_thread_function() {
 						inet_ntop(AF_INET, &src.sin_addr, ip, sizeof(ip));
 						uint16_t sport = ntohs(src.sin_port);
 
-						udp_values[packet_queue_count] = *((float*) buf.data());
+						float *data = (float*) buf.data();
+
+						for (int j = 0; j < data_channels; j++)
+						{
+							udp_values[packet_queue_count*MAX_DATA_CHANNELS + j] = data[j];
+						}
+
 						packet_queue_count++;
-						LOGD("Data", *((float*) buf.data()));
+						// LOGD("Data", *((float*) buf.data()));
 
-						// std::string_view msg(buf.data(), static_cast<size_t>(r));
-						// std::cout << "Got " << r << " bytes from " << ip << ":" << sport
-						//		  << " -> \"" << msg << "\"\n";
-
-						// LOGD("Got msg", msg);
-
-						// Optional: echo response
-						// sendto(sock, msg.data(), msg.size(), 0,
-						//        reinterpret_cast<sockaddr*>(&src), srclen);
 					} else if (r == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
 						// No more packets
 						break;
@@ -301,51 +324,80 @@ void DataThreadPlugin::updateSettings (OwnedArray<ContinuousChannel>* continuous
                                        OwnedArray<ConfigurationObject>* configurationObjects)
 {
 	// Clear previous values
-   sourceStreams->clear();
-   sourceBuffers.clear(); // DataThread class member
-   continuousChannels->clear();
-   eventChannels->clear();
+	sourceStreams->clear();
+	sourceBuffers.clear(); // DataThread class member
+	continuousChannels->clear();
+	eventChannels->clear();
 
-   DataStream::Settings settings
-   {
-      "UDP Packet Stream", // stream name
-      "Pulls data from UDP packets",   // stream description
-      "identifier",    // stream identifier
-      30000.0          // stream sample rate
-   };
+	LOGD("Update Settings");
 
-   DataStream* stream = new DataStream(settings);
+	DataStream::Settings packet_stream_settings
+	{
+	   "UDP Packet Stream", // stream name
+	   "Pulls data from UDP packets",   // stream description
+	   "identifier",    // stream identifier
+	   30000.0          // stream sample rate
+	};
 
-   sourceStreams->add(stream); // add pointer to owned array
+	DataStream::Settings packet_rate_stream_settings
+	{
+	   "UDP Packet Rate", // stream name
+	   "Rate at which packets are being transfered",   // stream description
+	   "identifier",    // stream identifier
+	   30000.0          // stream sample rate
+	};
 
-   // create a data buffer and add it to the sourceBuffer array
-   sourceBuffers.add(new DataBuffer(NUM_CHANNELS, 48000));
-   dataBuffer = sourceBuffers.getLast();
+	DataStream* packet_stream = new DataStream(packet_stream_settings);
+	DataStream* packet_rate_stream = new DataStream(packet_rate_stream_settings);
 
-   for (int i = 0; i < NUM_CHANNELS; i++)
-   {
-      ContinuousChannel::Settings settings{
-                             ContinuousChannel::Type::ELECTRODE, // channel type
-                             "CH" + String(i+1), // channel name
-                             "description",      // channel description
-                             "identifier",       // channel identifier
-                             0.195,              // channel bitvolts scaling
-                             stream              // associated data stream
-                     };
+	sourceStreams->add(packet_stream); // add pointer to owned array
+	sourceStreams->add(packet_rate_stream); // add pointer to owned array
 
-      continuousChannels->add(new ContinuousChannel(settings));
-   }
+	// create a data buffer and add it to the sourceBuffer array
+	sourceBuffers.add(new DataBuffer(MAX_DATA_CHANNELS, 48000));
+	dataBuffer = sourceBuffers.getLast();
 
-   EventChannel::Settings settings2{
-                     EventChannel::Type::TTL, // channel type (must be TTL)
-                     "Device Event Channel",  // channel name
-                     "description",           // channel description
-                     "identifier",            // channel identifier
-                     stream,                  // associated data stream
-                     8                        // maximum number of TTL lines
-             };
+	sourceBuffers.add(new DataBuffer(METRICS_CHANNELS, 48000));
+	metricsDataBuffer = sourceBuffers.getLast();
 
-   eventChannels->add(new EventChannel(settings2));
+	// packet channels
+	for (int i = 0; i < MAX_DATA_CHANNELS; i++)
+	{
+	   ContinuousChannel::Settings settings{
+	                          ContinuousChannel::Type::ELECTRODE, // channel type
+	                          "CH" + String(i+1), // channel name
+	                          "description",      // channel description
+	                          "identifier",       // channel identifier
+	                          0.195,              // channel bitvolts scaling
+	                          packet_stream              // associated data stream
+	                  };
+
+	   continuousChannels->add(new ContinuousChannel(settings));
+	}
+
+	// setting channels
+	ContinuousChannel::Settings settings{
+						  ContinuousChannel::Type::ELECTRODE, // channel type
+						  "Packet Rate", // channel name
+						  "description",      // channel description
+						  "identifier",       // channel identifier
+						  0.195,              // channel bitvolts scaling
+						  packet_rate_stream              // associated data stream
+				  };
+
+	continuousChannels->add(new ContinuousChannel(settings));
+
+	// Not sure if this is needed
+	EventChannel::Settings settings2{
+	                  EventChannel::Type::TTL, // channel type (must be TTL)
+	                  "Device Event Channel",  // channel name
+	                  "description",           // channel description
+	                  "identifier",            // channel identifier
+	                  packet_stream,                  // associated data stream
+	                  8                        // maximum number of TTL lines
+	          };
+
+	eventChannels->add(new EventChannel(settings2));
 }
 
 bool DataThreadPlugin::startAcquisition()
@@ -356,7 +408,8 @@ bool DataThreadPlugin::startAcquisition()
 }
 
 
-
+tp last_buffer_update;
+float packet_rate = 0;
 bool DataThreadPlugin::updateBuffer()
 {
 
@@ -364,19 +417,46 @@ bool DataThreadPlugin::updateBuffer()
 
 	for (int i = 0; i < packet_queue_count; i++)
 	{
-		scaled_samples[i] = udp_values[i] * 25;
-		sample_numbers[i] = totalSamples++;
+		for (int j = 0; j < data_channels; j++)
+		{
+			data_points[i*packet_queue_count + j] = udp_values[i*MAX_DATA_CHANNELS + j] * data_scale;
+		}
+		sample_numbers[i] = totalDataPointSamples++;
 		used_values++;
 	}
 
 	packet_queue_count = 0;
 
-
-	dataBuffer->addToBuffer(scaled_samples,
+	dataBuffer->addToBuffer(data_points,
                            sample_numbers,
                            timestamps,
                            event_codes,
                            used_values);
+
+	// Metrics
+
+	tp t = get_time();
+	long deltatime = std::chrono::duration_cast<std::chrono::microseconds>(t - last_buffer_update).count() + 1;
+
+	const float to_seconds = 0.000001;
+
+	float packet_avg = 0.001;
+
+	float rate = (float) used_values / (deltatime * to_seconds);
+	packet_rate = packet_rate * (1 - packet_avg) + rate * packet_avg;
+
+	last_buffer_update = t;
+
+
+	metric_data_points[0] = packet_rate;
+	metric_sample_numbers[0] = totalDataMetricsSamples++;
+
+	metricsDataBuffer->addToBuffer(metric_data_points, 
+								   metric_sample_numbers, 
+								   metric_timestamps, 
+								   metric_event_codes, 
+								   1);
+	
 
 	return true;
 
@@ -384,6 +464,7 @@ bool DataThreadPlugin::updateBuffer()
 
 bool DataThreadPlugin::stopAcquisition()
 {
+	last_buffer_update = get_time();
 	if (isThreadRunning())
 	{
 	  signalThreadShouldExit(); //stop thread
