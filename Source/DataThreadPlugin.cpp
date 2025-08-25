@@ -540,24 +540,46 @@ void DataThreadPlugin::parameterValueChanged (Parameter* param)
 		LOGD ("Port changed to ", port); // log message
 	
    }
-   else if (param->getName().equalsIgnoreCase ("interval"))
+   else if (param->getName().equalsIgnoreCase ("scale"))
    {
+	   data_scale = param->getValue();
    }
-   else if (param->getName().equalsIgnoreCase ("output_line"))
+   else if (param->getName().equalsIgnoreCase ("channels"))
    {
+	   data_channels = param->getValue();
    }
 }
 
 void DataThreadPlugin::registerParameters()
 {
    // Parameter for event frequency (Hz)
-   addIntParameter (Parameter::PROCESSOR_SCOPE, // parameter scope
+	addIntParameter (Parameter::PROCESSOR_SCOPE, // parameter scope
                      "port", // parameter name
                      "Port", // display name
                      "Port to listen for UDP packets", // parameter description
                      8080, // default value
                      0, // minimum value
                      65535, // maximum value
+                     false); 
+	addIntParameter (Parameter::PROCESSOR_SCOPE, // parameter scope
+                     "channels", // parameter name
+                     "Channels", // display name
+                     "Number of channels to pull data from, arbitrary max", // parameter description
+                     1, // default value
+                     0, // minimum value
+                     8, // maximum value
+                     false); 
+
+
+	addFloatParameter (Parameter::PROCESSOR_SCOPE, // parameter scope
+                     "scale", // parameter name
+                     "Data Scale", // display name
+                     "Scale of all channels", // parameter description
+					 "Unit",
+                     25, // default value
+                     0, // minimum value
+                     15000, // maximum value
+					 0.25,
                      false); 
 }
 

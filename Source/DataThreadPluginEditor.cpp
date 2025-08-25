@@ -30,15 +30,19 @@ DataThreadPluginEditor::DataThreadPluginEditor (GenericProcessor* parentNode, Da
     this->thread = thread;
 
 	// Parameters
-   	addBoundedValueParameterEditor (Parameter::PROCESSOR_SCOPE, // parameter scope
+	addBoundedValueParameterEditor (Parameter::PROCESSOR_SCOPE, // parameter scope
                                  "port", // parameter name
                                  15, // x pos
                                  35); // y pos
-									  //
-   	// addBoundedValueParameterEditor (Parameter::PROCESSOR_SCOPE, // parameter scope
-      //                            "", // parameter name
-        //                          15, // x pos
-          //                        35); // y pos
+	addBoundedValueParameterEditor (Parameter::PROCESSOR_SCOPE, // parameter scope
+                                 "channels", // parameter name
+                                 15, // x pos
+                                 95); // y pos
+								  //
+	addBoundedValueParameterEditor (Parameter::PROCESSOR_SCOPE, // parameter scope
+                                  "scale", // parameter name
+                                  15, // x pos
+                                  65); // y pos
 
 }
 
