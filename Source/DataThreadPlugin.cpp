@@ -46,13 +46,14 @@ const int MAX_DATA_CHANNELS = 8;
 const int METRICS_CHANNELS = 1;
 const int MAX_SAMPLES_PER_CHANNEL = 1024;
 
+int64 totalSamples = 0;
+
 // Datapoints
 float data_points[MAX_DATA_CHANNELS * MAX_SAMPLES_PER_CHANNEL];
 int64 sample_numbers[MAX_SAMPLES_PER_CHANNEL]; 
 uint64 event_codes[MAX_SAMPLES_PER_CHANNEL];
 double timestamps[MAX_SAMPLES_PER_CHANNEL];
 
-int64 totalDataPointSamples = 0;
 
 
 DataBuffer* dataBuffer;
@@ -64,20 +65,17 @@ uint64 metric_event_codes[MAX_SAMPLES_PER_CHANNEL];
 double metric_timestamps[MAX_SAMPLES_PER_CHANNEL];
 
 
-int64 totalDataMetricsSamples = 0;
 
 DataBuffer* metricsDataBuffer;
 
 // UDP variables
 int port = 8080;
 
-int data_channels = 2;
+int data_channels = 5;
 float data_scale = 25;
 
-const int MAX_UDP_VALUES_STORED = 100;
-
 std::atomic<int> packet_queue_count(0);
-std::atomic<float> udp_values[MAX_UDP_VALUES_STORED * MAX_DATA_CHANNELS];
+std::atomic<float> udp_values[MAX_SAMPLES_PER_CHANNEL * MAX_DATA_CHANNELS];
 std::atomic<int> server_running(0);
 std::atomic<int> server_closed(0);
 std::atomic<int> point_per_packet(1);
@@ -220,10 +218,18 @@ int udp_thread_function() {
 
 						float *data = (float*) buf.data();
 
+						if (MAX_SAMPLES_PER_CHANNEL <= packet_queue_count)
+						{
+							LOGD("Forced to drop packet");
+							break;
+						}
+
 						for (int j = 0; j < data_channels; j++)
 						{
-							udp_values[packet_queue_count*MAX_DATA_CHANNELS + j] = data[j];
+							udp_values[j*MAX_SAMPLES_PER_CHANNEL + packet_queue_count] = data[j];
 						}
+
+						//LOGD("1: ", data[3], ", 2: ", data[4]);
 
 						packet_queue_count++;
 						// LOGD("Data", *((float*) buf.data()));
@@ -241,6 +247,9 @@ int udp_thread_function() {
 				}
 			}
 		}
+
+
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
 	}
 
 
@@ -403,6 +412,10 @@ void DataThreadPlugin::updateSettings (OwnedArray<ContinuousChannel>* continuous
 bool DataThreadPlugin::startAcquisition()
 {
 	startThread();
+
+	for (int i = 0; i < MAX_SAMPLES_PER_CHANNEL * MAX_DATA_CHANNELS; i++)
+		udp_values[i] = 0;
+
 	restart_thread(); // Start UDP thread
 	return true;
 }
@@ -413,16 +426,32 @@ float packet_rate = 0;
 bool DataThreadPlugin::updateBuffer()
 {
 
-	int used_values = 0;
+	int packet_count = packet_queue_count; // prevent multithreading weirdness
+	if (packet_count < 300)
+	{
 
-	for (int i = 0; i < packet_queue_count; i++)
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		return true;
+	}
+
+	for (int i = 0; i < packet_count; i++)
 	{
 		for (int j = 0; j < data_channels; j++)
 		{
-			data_points[i*packet_queue_count + j] = udp_values[i*MAX_DATA_CHANNELS + j] * data_scale;
+			data_points[j * packet_count + i] = udp_values[j * MAX_SAMPLES_PER_CHANNEL + i] * data_scale;
 		}
-		sample_numbers[i] = totalDataPointSamples++;
-		used_values++;
+
+
+		
+
+		sample_numbers[i] = totalSamples++;
+	}
+
+	// Filling other channels with 0s
+	for (int i = data_channels*packet_count; i < MAX_DATA_CHANNELS*packet_count; i++)
+	{
+
+		data_points[i] = 0;
 	}
 
 	packet_queue_count = 0;
@@ -431,25 +460,25 @@ bool DataThreadPlugin::updateBuffer()
                            sample_numbers,
                            timestamps,
                            event_codes,
-                           used_values);
+                           packet_count);
 
 	// Metrics
 
 	tp t = get_time();
-	long deltatime = std::chrono::duration_cast<std::chrono::microseconds>(t - last_buffer_update).count() + 1;
+	long deltatime = std::chrono::duration_cast<std::chrono::microseconds>(t - last_buffer_update).count() + 1; // +1 to prevent  / 0 errors
 
 	const float to_seconds = 0.000001;
 
-	float packet_avg = 0.001;
+	float packet_avg = 0.1;
 
-	float rate = (float) used_values / (deltatime * to_seconds);
+	float rate = (float) packet_count / (deltatime * to_seconds);
 	packet_rate = packet_rate * (1 - packet_avg) + rate * packet_avg;
 
 	last_buffer_update = t;
 
 
 	metric_data_points[0] = packet_rate;
-	metric_sample_numbers[0] = totalDataMetricsSamples++;
+	metric_sample_numbers[0] = totalSamples++;
 
 	metricsDataBuffer->addToBuffer(metric_data_points, 
 								   metric_sample_numbers, 

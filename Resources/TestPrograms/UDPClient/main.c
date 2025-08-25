@@ -1,6 +1,7 @@
 // Client side implementation of UDP client-server model 
 #include <bits/stdc++.h> 
 #include <cmath>
+#include <iostream>
 #include <stdlib.h> 
 #include <unistd.h> 
 #include <string.h> 
@@ -37,13 +38,22 @@ int main() {
     socklen_t len; 
 
 	int frame = 0;
-	float f[2];
+	float f[5];
+
+	const float frequency = 0.25;
+	const float period = (1.0 / frequency);
+
 	while (1)
 	{
-		f[0] = sinf((float) frame * 0.001);
-		f[1] = cosf((float) frame * 0.001);
+		const float t = frame / 1000.0;
+		const float scaled = fmodf(t * frequency, 1);
+		f[0] = sinf((float) 2 * M_PI * t * frequency);
+		f[1] = cosf((float) 2 * M_PI * t * frequency);
+		f[2] = ( scaled > 0.5 ) ? 0 : 1;
+		f[3] = ( scaled > 0.5 ) ? -1 : 1;
+		f[4] = scaled;
 
-		sendto(sockfd, f, sizeof(float[2]), 
+		sendto(sockfd, f, sizeof(float[5]), 
 			MSG_CONFIRM, (const struct sockaddr *) &servaddr,  
 				sizeof(servaddr)); 
 
