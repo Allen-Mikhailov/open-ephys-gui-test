@@ -13,6 +13,7 @@
   
 #define PORT	8080 
 #define MAXLINE 1024 
+#define CHANNELS 128
   
 // Driver code 
 int main() { 
@@ -38,7 +39,7 @@ int main() {
     socklen_t len; 
 
 	int frame = 0;
-	float f[5];
+	short f[CHANNELS];
 
 	const float frequency = 0.25;
 	const float period = (1.0 / frequency);
@@ -47,13 +48,12 @@ int main() {
 	{
 		const float t = frame / 1000.0;
 		const float scaled = fmodf(t * frequency, 1);
-		f[0] = sinf((float) 2 * M_PI * t * frequency);
-		f[1] = cosf((float) 2 * M_PI * t * frequency);
-		f[2] = ( scaled > 0.5 ) ? 0 : 1;
-		f[3] = ( scaled > 0.5 ) ? -1 : 1;
-		f[4] = scaled;
+		for (int i = 0; i < CHANNELS; i++)
+		{
+			f[i] = (short) (sinf((float) 2 * M_PI * t * frequency + i * 0.06) * 32766);
+		}
 
-		sendto(sockfd, f, sizeof(float[5]), 
+		sendto(sockfd, f, sizeof(short[CHANNELS]), 
 			MSG_CONFIRM, (const struct sockaddr *) &servaddr,  
 				sizeof(servaddr)); 
 

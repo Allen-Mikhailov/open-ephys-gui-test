@@ -42,8 +42,8 @@
 #include <thread>
 #include <chrono>
 
-const int MAX_DATA_CHANNELS = 8;
-const int METRICS_CHANNELS = 1;
+const int MAX_DATA_CHANNELS = 128;
+const int METRICS_CHANNELS = 2;
 const int MAX_SAMPLES_PER_CHANNEL = 1024;
 
 int64 totalSamples = 0;
@@ -70,8 +70,8 @@ DataBuffer* metricsDataBuffer;
 
 // UDP variables
 int port = 8080;
-
 int data_channels = 5;
+int gui_refresh_min = 300;
 float data_scale = 25;
 
 std::atomic<int> packet_queue_count(0);
@@ -216,7 +216,7 @@ int udp_thread_function() {
 						inet_ntop(AF_INET, &src.sin_addr, ip, sizeof(ip));
 						uint16_t sport = ntohs(src.sin_port);
 
-						float *data = (float*) buf.data();
+						short *data = (short*) buf.data();
 
 						if (MAX_SAMPLES_PER_CHANNEL <= packet_queue_count)
 						{
@@ -427,7 +427,7 @@ bool DataThreadPlugin::updateBuffer()
 {
 
 	int packet_count = packet_queue_count; // prevent multithreading weirdness
-	if (packet_count < 300)
+	if (packet_count < gui_refresh_min)
 	{
 
 		std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -529,7 +529,7 @@ String DataThreadPlugin::handleConfigMessage (const String& msg)
 
 void DataThreadPlugin::parameterValueChanged (Parameter* param)
 {
-   if (param->getName().equalsIgnoreCase ("port"))
+	if (param->getName().equalsIgnoreCase ("port"))
    {
 		int new_port = param->getValue();	
 		if (server_running)
@@ -540,13 +540,17 @@ void DataThreadPlugin::parameterValueChanged (Parameter* param)
 		LOGD ("Port changed to ", port); // log message
 	
    }
-   else if (param->getName().equalsIgnoreCase ("scale"))
+	else if (param->getName().equalsIgnoreCase ("scale"))
    {
 	   data_scale = param->getValue();
    }
-   else if (param->getName().equalsIgnoreCase ("channels"))
+	else if (param->getName().equalsIgnoreCase ("channels"))
    {
 	   data_channels = param->getValue();
+   }
+	else if (param->getName().equalsIgnoreCase ("packet_hold"))
+   {
+	   gui_refresh_min = param->getValue();
    }
 }
 
@@ -567,8 +571,18 @@ void DataThreadPlugin::registerParameters()
                      "Number of channels to pull data from, arbitrary max", // parameter description
                      1, // default value
                      0, // minimum value
-                     8, // maximum value
+                     MAX_DATA_CHANNELS, // maximum value
                      false); 
+
+	addIntParameter (Parameter::PROCESSOR_SCOPE, // parameter scope
+                     "packet_hold", // parameter name
+                     "Packet Hold", // display name
+                     "Number of packets before plugin will write to buffer (improves performace probably)", // parameter description
+                     300, // default value
+                     0, // minimum value
+                     1000, // maximum value
+                     false); 
+
 
 
 	addFloatParameter (Parameter::PROCESSOR_SCOPE, // parameter scope
