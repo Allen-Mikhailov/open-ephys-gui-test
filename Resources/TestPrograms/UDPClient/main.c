@@ -46,20 +46,23 @@ int main() {
 
 	while (1)
 	{
-		const float t = frame / 1000.0;
-		const float scaled = fmodf(t * frequency, 1);
-		for (int i = 0; i < CHANNELS; i++)
+		for (int p = 0; p < 5; p++)
 		{
-			f[i] = (short) (sinf((float) 2 * M_PI * t * frequency + i * 0.06) * 32766);
-		}
+			const float t = frame / 1000.0;
+			const float scaled = fmodf(t * frequency, 1);
+			for (int i = 0; i < CHANNELS; i++)
+			{
+				f[i] = (short) (sinf((float) 2 * M_PI * t * frequency + i * 0.15) * 32766);
+			}
 
-		sendto(sockfd, f, sizeof(short[CHANNELS]), 
-			MSG_CONFIRM, (const struct sockaddr *) &servaddr,  
-				sizeof(servaddr)); 
+			sendto(sockfd, f, sizeof(short[CHANNELS]), 
+				MSG_CONFIRM, (const struct sockaddr *) &servaddr,  
+					sizeof(servaddr)); 
+			frame++;
+		}
 
 		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
-		frame++;
 	}
       
     
